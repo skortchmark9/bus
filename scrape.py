@@ -6,7 +6,7 @@ import aiofiles
 import os
 from datetime import datetime
 
-cameras_path = 'data/cameras_manhattan.json'
+cameras_path = 'data/cameras_m104.json'
 
 
 cameras_m104 = set([
@@ -50,7 +50,7 @@ def load_cameras():
 async def fetch_and_save_image(session, camera):
     camera_id = camera["id"]
     url = camera["imageUrl"]
-    folder = os.path.join("data", "camera_images")
+    folder = os.path.join("data", "camera_images", camera_id)
     os.makedirs(folder, exist_ok=True)
 
     try:
