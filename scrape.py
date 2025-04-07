@@ -5,6 +5,8 @@ import aiohttp
 import aiofiles
 import os
 from datetime import datetime
+import shutil
+
 
 cameras_path = 'data/cameras_m104.json'
 
@@ -45,6 +47,13 @@ def load_cameras():
 
     return cameras
 
+def check_disk_space(path="/"):
+    total, used, free = shutil.disk_usage(path)
+    print(f"Disk usage for: {path}")
+    print(f"Total: {total // (2**30)} GB")
+    print(f"Used: {used // (2**30)} GB")
+    print(f"Free: {free // (2**30)} GB")
+    return free // (2**30)
 
 
 async def fetch_and_save_image(session, camera):
@@ -69,7 +78,7 @@ async def fetch_and_save_image(session, camera):
         print(f"Error fetching image for {camera_id}: {e}")
 
 async def poll_camera(session, camera):
-    while True:
+    while check_disk_space() > 2:
         await fetch_and_save_image(session, camera)
         await asyncio.sleep(2)
 
