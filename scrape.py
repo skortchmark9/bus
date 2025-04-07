@@ -47,7 +47,7 @@ def load_cameras():
 
     return cameras
 
-def check_disk_space(path="/"):
+def check_disk_space(path="/mnt/volume_nyc1_01"):
     total, used, free = shutil.disk_usage(path)
     return free // (2**30)
 
