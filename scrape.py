@@ -49,10 +49,6 @@ def load_cameras():
 
 def check_disk_space(path="/"):
     total, used, free = shutil.disk_usage(path)
-    print(f"Disk usage for: {path}")
-    print(f"Total: {total // (2**30)} GB")
-    print(f"Used: {used // (2**30)} GB")
-    print(f"Free: {free // (2**30)} GB")
     return free // (2**30)
 
 
