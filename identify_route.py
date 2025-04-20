@@ -1,3 +1,12 @@
+"""
+Things we could incorporate:
+* OCR on yellow part of bus signs
+* Knowledge of bus routes
+* Timestamps for object id
+* Status of previous intersection along route
+* Vector of bus within intersection view
+
+"""
 import cv2
 import numpy as np
 import os
