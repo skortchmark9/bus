@@ -4,6 +4,7 @@ import os
 import glob
 
 path = 'data/nyc-bus.v3i.yolov8'
+output_path = 'data/masked_images'
 
 def mask_images(path:str):
     image_list = os.listdir(path)
@@ -66,7 +67,7 @@ def mask_image(image_path, yolo_boxes):
     masked_img = cv2.bitwise_and(img, img, mask=mask)
     return masked_img
 
-def mask_images_with_bboxes(output_dir:str, images_with_bboxes:list):
+def mask_images_with_bboxes(output_dir=output_path, images_with_bboxes:list):
     os.makedirs(os.path.join(output_dir, 'masked_images'), exist_ok=True)
     for image_path, bboxes in images_with_bboxes:
         img = mask_image(image_path, bboxes)
