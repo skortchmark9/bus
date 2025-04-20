@@ -11,26 +11,17 @@ import cv2
 from PIL import Image
 import numpy as np
 
+from transformers import BlipProcessor, BlipForConditionalGeneration
+import torch
+from PIL import Image
+import cv2
+
+
 device = "mps" if torch.backends.mps.is_available() else "cpu"
-model, preprocess = clip.load("ViT-B/32", device=device)
+# Load BLIP model
+processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base").to(device)
 
-def match_clip_label(img, labels):
-    # Convert OpenCV image to PIL
-    pil_img = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-    image_input = preprocess(pil_img).unsqueeze(0).to(device)
-    text_input = clip.tokenize(labels).to(device)
-
-    with torch.no_grad():
-        image_features = model.encode_image(image_input)
-        text_features = model.encode_text(text_input)
-
-        image_features /= image_features.norm(dim=-1, keepdim=True)
-        text_features /= text_features.norm(dim=-1, keepdim=True)
-
-        similarity = image_features @ text_features.T
-        probs = similarity.softmax(dim=-1).cpu().numpy()[0]
-
-    return sorted(zip(labels, probs), key=lambda x: -x[1])
 
 
 def run_tesseract(img, psm=6):
@@ -268,3 +259,13 @@ def ocr_yellow_characters(img):
         plt.axis('off')
     plt.show()
     return ''.join(chars)
+
+def caption_with_blip(img):
+    """
+    img: OpenCV BGR image
+    Returns: string caption
+    """
+    pil_img = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+    inputs = processor(images=pil_img, return_tensors="pt").to(device)
+    output = model.generate(**inputs, max_new_tokens=10)
+    return processor.decode(output[0], skip_special_tokens=True)
