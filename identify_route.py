@@ -5,6 +5,33 @@ import glob
 import easyocr
 import matplotlib.pyplot as plt
 import pytesseract
+import torch
+import clip
+import cv2
+from PIL import Image
+import numpy as np
+
+device = "mps" if torch.backends.mps.is_available() else "cpu"
+model, preprocess = clip.load("ViT-B/32", device=device)
+
+def match_clip_label(img, labels):
+    # Convert OpenCV image to PIL
+    pil_img = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+    image_input = preprocess(pil_img).unsqueeze(0).to(device)
+    text_input = clip.tokenize(labels).to(device)
+
+    with torch.no_grad():
+        image_features = model.encode_image(image_input)
+        text_features = model.encode_text(text_input)
+
+        image_features /= image_features.norm(dim=-1, keepdim=True)
+        text_features /= text_features.norm(dim=-1, keepdim=True)
+
+        similarity = image_features @ text_features.T
+        probs = similarity.softmax(dim=-1).cpu().numpy()[0]
+
+    return sorted(zip(labels, probs), key=lambda x: -x[1])
+
 
 def run_tesseract(img, psm=6):
     if type(img) is str:
@@ -161,8 +188,9 @@ def try_ocr_on_masked_images(output_dir=output_path):
     masked_images = glob.glob(os.path.join(output_dir, '*.jpg'))
     for image_path in masked_images:
         img = cv2.imread(image_path)
-        ocr_results = run_ocr_on_image(img)
-        show_ocr_results(img, ocr_results)
+        ocr_yellow_characters(img)
+        # ocr_results = run_ocr_on_image(img)
+        # show_ocr_results(img, ocr_results)
 
 
 def extract_char_regions(img, min_area=20, pad_px=2, show_debug=False):
@@ -212,13 +240,31 @@ def extract_char_regions(img, min_area=20, pad_px=2, show_debug=False):
 
 def ocr_yellow_characters(img):
     chars = []
+    candidates = [
+        "This is an M1 bus", "This is an M2 bus", "This is an M3 bus",
+        "This is an M7 bus", "This is an M10 bus", "I can't tell what bus this is",
+        "It's too small to tell"
+    ]
+    results = match_clip_label(img, candidates)
+    print(results[0])
+    show(img)
+    return
+
     patches = extract_char_regions(img, show_debug=True)
     for i, patch in enumerate(patches):
-        result = run_tesseract(patch)
+        candidates = [
+            "This is an M1 bus", "This is an M2 bus", "This is an M3 bus",
+            "This is an M7 bus", "This is an M10 bus", "I can't tell what bus this is"
+        ]
+        result = match_clip_label(patch, candidates)
+        print(result)
+        confidence = result[0][1]
+        result = result[0][0]
+        print(f"Detected: {result}")
         chars.append(result)
         plt.subplot(1, len(patches), i+1)
         plt.imshow(cv2.cvtColor(patch, cv2.COLOR_BGR2RGB))
-        plt.title(f"'{result}'")
+        plt.title(f"'{result}' ({confidence:.2f})")
         plt.axis('off')
     plt.show()
     return ''.join(chars)
