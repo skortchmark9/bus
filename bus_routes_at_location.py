@@ -1,6 +1,5 @@
 import json
 import pandas as pd
-from geopy.distance import geodesic
 from collections import defaultdict
 import pandas as pd
 from shapely.geometry import LineString, Point
