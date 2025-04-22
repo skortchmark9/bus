@@ -2,7 +2,8 @@ from ultralytics import YOLO
 import shutil
 import os
 from pathlib import Path
-
+import glob
+import json
 import cv2
 import numpy as np
 
@@ -69,3 +70,21 @@ def extract_buses_from_dir(
             shutil.copy(img_path, output_img_path)
             count += 1
 
+
+def copy_annotated_buses_from_cvat(path="data/nyc-bus.v3i.yolov8", out="tmp"):
+    """Copy annotated bus images from CVAT, split by train/test/valid to a new flat directory
+    with a json file containing bounding boxes."""
+    os.makedirs(out)
+    image_paths = glob.glob(path + '/*/images/*.jpg')
+    labels = {}
+    for image_path in image_paths:
+        label_path = image_path.replace('images', 'labels').replace('.jpg', '.txt')
+        name = os.path.basename(image_path)
+        with open(label_path, 'r') as f:
+            contents = f.read()
+            if contents:
+                shutil.copy(image_path, out)
+                labels[name] = contents
+
+    with open(out + '/labels.json', 'w') as f:
+        json.dump(labels, f, indent=4)
