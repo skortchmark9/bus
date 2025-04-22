@@ -19,8 +19,12 @@ def main():
             selected_cameras.append(camera)
 
     sessions = []
+
+    # Update this if you want to use a custom model
+    model = CameraSession.default_yolo_model
+
     for camera in selected_cameras:
-        session = CameraSession(camera["id"], camera)
+        session = CameraSession(camera["id"], camera, model)
         sessions.append(session)
 
     for session in sessions:

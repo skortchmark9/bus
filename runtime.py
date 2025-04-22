@@ -93,14 +93,18 @@ class BusTrack:
         return f"Bus {self.bus_id} {n_frames} frames seen from {self.first_seen} to {self.last_seen}, route: {route}"
 
 class CameraSession:
-    def __init__(self, camera_id, camera_attributes):
+
+    default_yolo_model = 'yolov8n.pt'
+
+    def __init__(self, camera_id, camera_attributes, model):
         self.camera_id = camera_id
         self.camera_attributes = camera_attributes
         self.folder = Path(PHOTOS_DIR, camera_id)
         self.last_seen = ""
         self.bus_tracks = {}
         self.tracker = TrackerManager(camera_name=self.camera_attributes["name"])
-        self.model = YOLO("yolov8n.pt", verbose=False)
+        self.using_default_model = model == self.default_yolo_model
+        self.model = YOLO(model, verbose=False)
 
 
     def get_new_frames(self):
@@ -115,16 +119,22 @@ class CameraSession:
         timestamp = frame_path.stem
         timestamp = datetime.strptime(timestamp, "%Y%m%dT%H%M%S")
 
-        results = self.model.predict(frame_path, classes=[5], verbose=False)
+        if self.using_default_model:
+            # 5 is bus in default model
+            results = self.model.predict(frame_path, verbose=False, classes=[5])
+        else:
+            results = self.model.predict(frame_path, verbose=False)
 
         detections = sv.Detections.from_ultralytics(results[0])
         xyxys, bus_ids = self.tracker.update(detections, timestamp)
         for xyxy, bus_id in zip(xyxys, bus_ids):
             x1, y1, x2, y2 = map(int, xyxy)
             crop = frame[y1:y2, x1:x2]
-            is_blue = is_mta_blue(crop)
-            if not is_blue:
-                continue
+
+            if self.using_default_model:
+                is_blue = is_mta_blue(crop)
+                if not is_blue:
+                    continue
 
             route_pred = self.recognize_sign(crop)
 
