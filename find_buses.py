@@ -167,7 +167,7 @@ def extract_buses_from_dir(
             if is_mta_blue(crop):  # 🔵 apply color filter to the crop
                 out_path = os.path.join(output_dir, f"{count:06d}.jpg")
                 expanded_crop = np.array(process_bus_crop(Image.fromarray(crop)))
-                if has_yellow_on_dark(expanded_crop):
+                # if has_yellow_on_dark(expanded_crop):
                     cv2.imwrite(out_path, expanded_crop)
                     count += 1
 
