@@ -168,8 +168,8 @@ def extract_buses_from_dir(
                 out_path = os.path.join(output_dir, f"{count:06d}.jpg")
                 expanded_crop = np.array(process_bus_crop(Image.fromarray(crop)))
                 # if has_yellow_on_dark(expanded_crop):
-                    cv2.imwrite(out_path, expanded_crop)
-                    count += 1
+                cv2.imwrite(out_path, expanded_crop)
+                count += 1
 
         # if found_bus:
         #     # Copy the image to the output directory
