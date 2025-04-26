@@ -136,6 +136,10 @@ def extract_buses_from_dir(
     model = YOLO(model_path)
     os.makedirs(output_dir, exist_ok=True)
 
+    # find the last image in the output directory to start the count
+    count = len(sorted(Path(output_dir).rglob("*.jpg")))
+    print("Starting count:", count)
+
     image_paths = sorted(Path(image_dir).rglob("*.jpg"))
     if limit:
         image_paths = image_paths[:limit]
