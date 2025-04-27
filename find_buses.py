@@ -199,3 +199,37 @@ def copy_annotated_buses_from_cvat(path="data/nyc-bus.v3i.yolov8", out="tmp"):
 
     with open(out + '/labels.json', 'w') as f:
         json.dump(labels, f, indent=4)
+
+
+def create_bus_crops_from_cvat(path="data/nyc-bus.v3i.yolov8", output_dir="tmp"):
+    """Copy annotated bus images from CVAT, split by train/test/valid to a new flat directory
+    with a json file containing bounding boxes."""
+    os.makedirs(output_dir, exist_ok=True)
+    image_paths = glob.glob(path + '/*/images/*.jpg')
+    count = 0
+    for image_path in image_paths:
+        label_path = image_path.replace('images', 'labels').replace('.jpg', '.txt')
+        with open(label_path, 'r') as f:
+            contents = f.readlines()
+            img = cv2.imread(image_path)
+            if contents:
+                for line in contents:
+                    count += 1
+                    out_path = os.path.join(output_dir, f"{count:06d}.jpg")
+                    box = line.split()
+
+                    x_center, y_center, w_rel, h_rel = map(float, box[1:5])
+
+                    img_width = img.shape[1]
+                    img_height = img.shape[0]
+
+                    x1 = int((x_center - w_rel / 2) * img_width)
+                    y1 = int((y_center - h_rel / 2) * img_height)
+                    x2 = int((x_center + w_rel / 2) * img_width)
+                    y2 = int((y_center + h_rel / 2) * img_height)
+
+                    crop = img.copy()
+                    crop = crop[y1:y2, x1:x2]
+                    expanded_crop = np.array(process_bus_crop(Image.fromarray(crop)))
+                    # if has_yellow_on_dark(expanded_crop):
+                    cv2.imwrite(out_path, expanded_crop)
