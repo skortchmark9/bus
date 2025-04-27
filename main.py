@@ -19,9 +19,32 @@ from runtime import CameraSession
 #
 
 
+import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
+import contextily as ctx
+import geopandas as gpd
+from shapely.geometry import Point
+
+def plot_cameras_on_nyc_map(camera_list):
+    # Create GeoDataFrame
+    gdf = gpd.GeoDataFrame(camera_list)
+    gdf["geometry"] = gdf.apply(lambda row: Point(row["longitude"], row["latitude"]), axis=1)
+    gdf.set_crs(epsg=4326, inplace=True)  # WGS84 lat/lon
+    gdf = gdf.to_crs(epsg=3857)  # Web Mercator for map tiles
+
+    # Plot
+    ax = gdf.plot(figsize=(10, 10), color="red", markersize=10)
+    ctx.add_basemap(ax, source=ctx.providers.CartoDB.Positron)  # Clean NYC basemap
+    plt.title("NYC Traffic Cameras")
+    plt.show()
+
+
+
+
 def main():
     selected_routes = [
-        'M101'
+        # 'M101',
+        'M104',
     ]
     cameras = load_cameras()
     route_shapes = load_route_shapes()
@@ -33,6 +56,16 @@ def main():
             selected_cameras.append(camera)
 
     sessions = []
+    print('\n'.join([camera["name"] for camera in selected_cameras]))
+    # Make the cameras unique by id
+    selected_cameras = {camera["id"]: camera for camera in selected_cameras}
+    selected_cameras = list(selected_cameras.values())
+    print("Selected cameras:", len(selected_cameras))
+
+    plot_cameras_on_nyc_map(selected_cameras)
+    return
+    # return
+
 
     # Update this if you want to use a custom model
     model = CameraSession.default_yolo_model
