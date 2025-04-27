@@ -36,7 +36,9 @@ def main():
 
     # Update this if you want to use a custom model
     model = CameraSession.default_yolo_model
-    # model = 'fine-tuned.pt'
+    model = 'models/yolov8n.pt'
+    # Tuned model
+    model = 'models/best.pt'
     print("Using model:", model)
 
     for camera in selected_cameras:
