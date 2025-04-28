@@ -67,7 +67,7 @@ def main():
     t1 = time.time()
     print(f"Time taken to filter cameras: {t1 - t0:.2f} seconds")
 
-    plot_cameras_on_nyc_map(selected_cameras)
+    # plot_cameras_on_nyc_map(selected_cameras)
 
 
     # Update this if you want to use a custom model
@@ -79,23 +79,33 @@ def main():
 
     route_predictor = RoutePredictor()
 
-    PHOTOS_DIR = 'data/examples/4_27_1500/camera_images_m104'
+    PHOTOS_DIR = 'data/camera_images'
     output_dir = 'output_50'
-
-    for camera in selected_cameras:
-        folder = Path(PHOTOS_DIR, camera["id"])
-        session = CameraSession(folder, camera, model, route_predictor)
-        sessions.append(session)
-
+    specific_camera_id = '45cb119b-0e4a-442e-9410-b810ab8c255d'
+    specific_camera_id = None
     min_timestamp = None
     max_timestamp = None
     # min_timestamp = '20250427T131710'
     # max_timestamp = '20250427T131900'
-    for session in sessions:
-        session.step(min_timestamp, max_timestamp)
 
-        for track in session.bus_tracks.values():
-            track.dump(session.camera_attributes)
+
+    for camera in selected_cameras:
+        if specific_camera_id and camera["id"] != specific_camera_id:
+            continue
+        folder = Path(PHOTOS_DIR, camera["id"])
+        session = CameraSession(folder, camera, model, route_predictor)
+        sessions.append(session)
+
+    i = 0
+    while True:
+        i += 1
+        print('*' * 20)
+        print(f"Iteration {i}")
+        for session in sessions:
+            session.step(min_timestamp, max_timestamp)
+            session.dump_tracks()
+
+            time.sleep(2)
         
     t2 = time.time()
     print(f"Time taken to process data: {t2 - t1:.2f} seconds")

@@ -27,7 +27,7 @@ class TrackerManager:
     def update(self, detections, timestamp):
         if self.last_timestamp and (timestamp - self.last_timestamp) > self.gap_threshold:
             print(f"[{self.camera_name}] Tracker reset due to time gap.")
-            self.tracker = sv.ByteTrack()
+            self.tracker = sv.ByteTrack(frame_rate=0.5)
             self.generation += 1
         self.last_timestamp = timestamp
 
@@ -54,16 +54,19 @@ class BusTrack:
         self.first_seen = None
         self.last_seen = None
         self.frames = []
+        self.output_dir = Path("output", self.bus_id)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+
 
     def update(self, timestamp, bbox, route_pred, frame):
         if not self.first_seen:
             self.first_seen = timestamp
         self.timestamps.append(timestamp)
         self.bboxes.append(bbox)
-        if route_pred != 'unknown':
-            self.route_preds.append(route_pred)
+        self.route_preds.append(route_pred)
         self.last_seen = timestamp
         self.frames.append(frame)
+        self.write_frame(frame, bbox, timestamp, route_pred)
 
     def is_expired(self, current_time, timeout=timedelta(seconds=10)):
         return self.last_seen and (current_time - self.last_seen) > timeout
@@ -76,28 +79,32 @@ class BusTrack:
             return "Uncertain"
         return max(counts, key=counts.get)
     
+    def write_frame(self, frame, bbox, timestamp, route_pred):
+        x1, y1, x2, y2 = bbox
+        timestamp_string = timestamp.strftime("%Y%m%dT%H%M%S")
+
+        label, confidence = route_pred
+        text = f'{label} {confidence:.2f}'
+
+        # Write route_pred on the frame
+        cv2.putText(frame, text, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.imwrite(f"{self.output_dir}/{timestamp_string}.jpg", frame)
+    
     def dump(self, camera_attributes):
-        # Create output directory if it doesn't exist
-        output_dir = Path("output", self.bus_id)
-        output_dir.mkdir(parents=True, exist_ok=True)
 
-        for timestamp, bbox, frame, route_pred in zip(self.timestamps, self.bboxes, self.frames, self.route_preds):
-            # Add bbox to frame and write to disk
-            x1, y1, x2, y2 = bbox
-            timestamp_string = timestamp.strftime("%Y%m%dT%H%M%S")
+        print(f'Dumping track for {self.get_final_route()} bus {self.bus_id} which arrived at {self.first_seen} and left at {self.last_seen}')
 
-            label, confidence = route_pred
-            text = f'{label} {confidence:.2f}'
-
-            # Write route_pred on the frame
-            cv2.putText(frame, text, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.imwrite(f"output/{self.bus_id}/{timestamp_string}.jpg", frame)
-
+        info = {
+            'camera': camera_attributes,
+            'bus_id': self.bus_id,
+            'route': self.get_final_route(),
+            'route_preds': self.route_preds,
+        }
         # save camera attributes
-        with open(f"output/{self.bus_id}/camera_info.json", "w") as f:
-            json.dump(camera_attributes, f, indent=4)
+        with open(f"{self.output_dir}/info.json", "w") as f:
+            json.dump(info, f, indent=4)
 
     def __str__(self):
         route = self.get_final_route()
@@ -120,14 +127,8 @@ class CameraSession:
 
     def get_new_frames(self, min_timestamp=None, max_timestamp=None):
         all_frames = sorted(self.folder.glob("*.jpg"))
-        print(f"Found {len(all_frames)} total frames")
-
-        # Show last seen
-        print(f"Last seen frame: {self.last_seen}")
-
         # Filter by last_seen
         new_frames = [f for f in all_frames if f.name > self.last_seen]
-        print(f"Frames after last_seen filter: {len(new_frames)}")
 
         # Further filter by min_timestamp and max_timestamp
         if min_timestamp:
@@ -139,6 +140,7 @@ class CameraSession:
             new_frames = [f for f in new_frames if f.stem <= max_timestamp]
             print(f"Frames after max_timestamp filter: {len(new_frames)}")
 
+        print(f"New frames: {len(new_frames)}")
         if new_frames:
             self.last_seen = new_frames[-1].name
 
@@ -157,6 +159,10 @@ class CameraSession:
 
         detections = sv.Detections.from_ultralytics(results[0])
         xyxys, bus_ids = self.tracker.update(detections, timestamp)
+
+        n_buses = 0
+        n_unknown = 0
+        new_buses = 0
         for xyxy, bus_id in zip(xyxys, bus_ids):
             x1, y1, x2, y2 = map(int, xyxy)
             crop = frame[y1:y2, x1:x2]
@@ -168,7 +174,11 @@ class CameraSession:
                     continue
 
             route_pred = self.route_predictor.predict(crop)
-            print(route_pred)
+            n_buses += 1
+            if route_pred[0] != 'unknown':
+                print(f"Detected {route_pred} bus at {self.camera_attributes["name"]}")
+            else:
+                n_unknown += 1
 
             # debug = True
             # if debug:
@@ -177,23 +187,27 @@ class CameraSession:
 
 
             if bus_id not in self.bus_tracks:
+                new_buses
                 self.bus_tracks[bus_id] = BusTrack(bus_id)
 
             self.bus_tracks[bus_id].update(timestamp, (x1, y1, x2, y2), route_pred, frame.copy())
 
-    def flush_expired(self):
-        now = datetime.now()
-        expired_ids = [bid for bid, track in self.bus_tracks.items() if track.is_expired(now)]
-        for bid in expired_ids:
-            bus_track = self.bus_tracks[bid]
-            print(bus_track)
-            # del self.bus_tracks[bid]
-
-    def recognize_sign(self, crop):
-        # placeholder for OCR / CLIP / classifier logic
-        return "Uncertain"
+        return n_buses, n_unknown
 
     def step(self, min_timestamp=None, max_timestamp=None):
-        for frame in self.get_new_frames(min_timestamp, max_timestamp):
-            self.process_frame(frame)
-        self.flush_expired()
+        frames = self.get_new_frames(min_timestamp, max_timestamp)
+        buses_seen = 0
+
+
+        for frame in frames:
+            n_buses, n_unknown = self.process_frame(frame)
+
+        return frames
+
+    def dump_tracks(self):
+        # Remove expired tracks
+        current_time = datetime.now()
+        expired_tracks = [bus_id for bus_id, track in self.bus_tracks.items() if track.is_expired(current_time)]
+        for bus_id in expired_tracks:
+            self.bus_tracks[bus_id].dump(self.camera_attributes)
+            del self.bus_tracks[bus_id]

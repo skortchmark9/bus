@@ -28,8 +28,6 @@ def predict_crop(img_arr, model, head, label_to_idx):
 
     label = idx_to_label[pred_idx.item()]
     confidence = prob.item()
-    print('label:', label)
-    print('confidence:', confidence)
 
     return label, confidence
 

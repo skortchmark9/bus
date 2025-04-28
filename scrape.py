@@ -73,7 +73,7 @@ def check_disk_space(path="/"):
 async def fetch_and_save_image(session, camera):
     camera_id = camera["id"]
     url = camera["imageUrl"]
-    folder = os.path.join("data", "camera_images_m104", camera_id)
+    folder = os.path.join("data", "camera_images", camera_id)
     os.makedirs(folder, exist_ok=True)
 
     try:

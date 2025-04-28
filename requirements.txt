@@ -1,3 +1,6 @@
 ultralytics
 aiohttp
 aiofiles
+contextly
+openai-clip
+geopandas
