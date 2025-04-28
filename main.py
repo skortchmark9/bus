@@ -1,4 +1,5 @@
 import time
+from pathlib import Path
 from bus_routes_at_location import (
     get_routes_for_camera,
     load_route_shapes,
@@ -19,13 +20,12 @@ from runtime import CameraSession
 # In [6]: get_routes_for_camera(cams[12], load_route_shapes())
 # Out[6]: ['M101', 'M102', 'M103', 'M42']
 #
-
-
 import matplotlib.pyplot as plt
 import matplotlib.pyplot as plt
 import contextily as ctx
 import geopandas as gpd
 from shapely.geometry import Point
+
 
 def plot_cameras_on_nyc_map(camera_list):
     # Create GeoDataFrame
@@ -67,20 +67,24 @@ def main():
     t1 = time.time()
     print(f"Time taken to filter cameras: {t1 - t0:.2f} seconds")
 
-    # plot_cameras_on_nyc_map(selected_cameras)
+    plot_cameras_on_nyc_map(selected_cameras)
 
 
     # Update this if you want to use a custom model
     model = CameraSession.default_yolo_model
     model = 'models/yolov8n.pt'
     # Tuned model
-    model = 'models/best.pt'
+    model = 'models/fine-tuned-50-epochs.pt'
     print("Using model:", model)
 
     route_predictor = RoutePredictor()
 
+    PHOTOS_DIR = 'data/examples/4_27_1500/camera_images_m104'
+    output_dir = 'output_50'
+
     for camera in selected_cameras:
-        session = CameraSession(camera["id"], camera, model, route_predictor)
+        folder = Path(PHOTOS_DIR, camera["id"])
+        session = CameraSession(folder, camera, model, route_predictor)
         sessions.append(session)
 
     min_timestamp = None

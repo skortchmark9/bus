@@ -108,10 +108,9 @@ class CameraSession:
 
     default_yolo_model = 'yolov8n.pt'
 
-    def __init__(self, camera_id, camera_attributes, model, route_predictor=None):
-        self.camera_id = camera_id
+    def __init__(self, folder, camera_attributes, model, route_predictor=None):
+        self.folder = folder
         self.camera_attributes = camera_attributes
-        self.folder = Path(PHOTOS_DIR, camera_id)
         self.last_seen = ""
         self.bus_tracks = {}
         self.tracker = TrackerManager(camera_name=self.camera_attributes["name"])
