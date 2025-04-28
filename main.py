@@ -1,8 +1,10 @@
+import time
 from bus_routes_at_location import (
     get_routes_for_camera,
     load_route_shapes,
     load_cameras,
 )
+from test_clip_finetune import RoutePredictor
 from runtime import CameraSession
 
 # {
@@ -42,6 +44,7 @@ def plot_cameras_on_nyc_map(camera_list):
 
 
 def main():
+    t0 = time.time()
     selected_routes = [
         # 'M101',
         'M104',
@@ -60,11 +63,11 @@ def main():
     # Make the cameras unique by id
     selected_cameras = {camera["id"]: camera for camera in selected_cameras}
     selected_cameras = list(selected_cameras.values())
-    print("Selected cameras:", len(selected_cameras))
 
-    plot_cameras_on_nyc_map(selected_cameras)
-    return
-    # return
+    t1 = time.time()
+    print(f"Time taken to filter cameras: {t1 - t0:.2f} seconds")
+
+    # plot_cameras_on_nyc_map(selected_cameras)
 
 
     # Update this if you want to use a custom model
@@ -74,16 +77,24 @@ def main():
     model = 'models/best.pt'
     print("Using model:", model)
 
+    route_predictor = RoutePredictor()
+
     for camera in selected_cameras:
-        session = CameraSession(camera["id"], camera, model)
+        session = CameraSession(camera["id"], camera, model, route_predictor)
         sessions.append(session)
 
+    min_timestamp = None
+    max_timestamp = None
+    # min_timestamp = '20250427T131710'
+    # max_timestamp = '20250427T131900'
     for session in sessions:
-        session.step()
+        session.step(min_timestamp, max_timestamp)
 
         for track in session.bus_tracks.values():
-            track.dump()
+            track.dump(session.camera_attributes)
         
+    t2 = time.time()
+    print(f"Time taken to process data: {t2 - t1:.2f} seconds")
 
 if __name__ == "__main__":
     main()

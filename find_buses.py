@@ -201,35 +201,60 @@ def copy_annotated_buses_from_cvat(path="data/nyc-bus.v3i.yolov8", out="tmp"):
         json.dump(labels, f, indent=4)
 
 
+def crop_to_box(img, xywh):
+    """Crop image using normalized YOLO format box (x_center, y_center, width, height)."""
+    x_center, y_center, w_rel, h_rel = xywh
+
+    img_height, img_width = img.shape[:2]
+
+    x1 = int((x_center - w_rel / 2) * img_width)
+    y1 = int((y_center - h_rel / 2) * img_height)
+    x2 = int((x_center + w_rel / 2) * img_width)
+    y2 = int((y_center + h_rel / 2) * img_height)
+
+    # Clip to image bounds
+    x1 = max(x1, 0)
+    y1 = max(y1, 0)
+    x2 = min(x2, img_width)
+    y2 = min(y2, img_height)
+
+    return img[y1:y2, x1:x2]
+
+
+def crop_and_resize(img, xywh):
+    crop = crop_to_box(img, xywh)
+    return resize(crop)
+
+def resize(img):
+    return np.array(process_bus_crop(Image.fromarray(img)))
+
+
 def create_bus_crops_from_cvat(path="data/nyc-bus.v3i.yolov8", output_dir="tmp"):
     """Copy annotated bus images from CVAT, split by train/test/valid to a new flat directory
     with a json file containing bounding boxes."""
     os.makedirs(output_dir, exist_ok=True)
-    image_paths = glob.glob(path + '/*/images/*.jpg')
+    image_paths = glob.glob(os.path.join(path, "*", "images", "*.jpg"))
     count = 0
+
     for image_path in image_paths:
         label_path = image_path.replace('images', 'labels').replace('.jpg', '.txt')
+        img = cv2.imread(image_path)
+
+        if img is None:
+            continue
+
         with open(label_path, 'r') as f:
             contents = f.readlines()
-            img = cv2.imread(image_path)
-            if contents:
-                for line in contents:
-                    count += 1
-                    out_path = os.path.join(output_dir, f"{count:06d}.jpg")
-                    box = line.split()
 
-                    x_center, y_center, w_rel, h_rel = map(float, box[1:5])
+        for line in contents:
+            count += 1
+            out_path = os.path.join(output_dir, f"{count:06d}.jpg")
+            parts = line.strip().split()
+            if len(parts) < 5:
+                continue
 
-                    img_width = img.shape[1]
-                    img_height = img.shape[0]
-
-                    x1 = int((x_center - w_rel / 2) * img_width)
-                    y1 = int((y_center - h_rel / 2) * img_height)
-                    x2 = int((x_center + w_rel / 2) * img_width)
-                    y2 = int((y_center + h_rel / 2) * img_height)
-
-                    crop = img.copy()
-                    crop = crop[y1:y2, x1:x2]
-                    expanded_crop = np.array(process_bus_crop(Image.fromarray(crop)))
-                    # if has_yellow_on_dark(expanded_crop):
-                    cv2.imwrite(out_path, expanded_crop)
+            xywh = list(map(float, parts[1:5]))  # skip class id, take bbox
+            crop = crop_to_box(img, xywh)
+            expanded_crop = np.array(process_bus_crop(Image.fromarray(crop)))
+            # if has_yellow_on_dark(expanded_crop):
+            cv2.imwrite(out_path, expanded_crop)

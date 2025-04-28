@@ -2,24 +2,22 @@ from PIL import Image
 import json
 import torch
 import torch.nn as nn
+import clip
 
 from clip_finetune import BusCropDataset, train_head, evaluate_head, save_head_and_labels, load_head_and_labels, ClassifierHead
 
+device = "mps" if torch.backends.mps.is_available() else "cpu"
+model, preprocess = clip.load("ViT-B/32", device=device)
+model.eval()
 
-def predict_crop(image_path, model, head_path="head.pth", labels_path="label_to_idx.json"):
-    # Load label mapping
-    with open(labels_path, "r") as f:
-        label_to_idx = json.load(f)
+
+def predict_crop(img_arr, model, head, label_to_idx):
+    img = Image.fromarray(img_arr)  # <<< convert numpy -> PIL
+
     idx_to_label = {v: k for k, v in label_to_idx.items()}
 
-    # Rebuild head
-    num_classes = len(label_to_idx)
-    head = ClassifierHead(512, num_classes).to(device)
-    head.load_state_dict(torch.load(head_path, map_location=device))
-    head.eval()
-
     # Process image
-    img = preprocess(Image.open(image_path)).unsqueeze(0).to(device)
+    img = preprocess(img).unsqueeze(0).to(device)
 
     with torch.no_grad():
         embedding = model.encode_image(img).float()
@@ -35,19 +33,16 @@ def predict_crop(image_path, model, head_path="head.pth", labels_path="label_to_
 
     return label, confidence
 
+class RoutePredictor:
+    def __init__(self, head_path="head.pth", labels_path="label_to_idx.json"):
+        self.head_path = head_path
+        self.labels_path = labels_path
+        self.model = model
+        self.head, self.label_to_idx = load_head_and_labels(head_path, labels_path)
 
-# Load frozen CLIP model
-import clip
-device = "mps" if torch.backends.mps.is_available() else "cpu"
-model, preprocess = clip.load("ViT-B/32", device=device)
-model.eval()
+    def predict_file(self, image_path):
+        img = Image.open(image_path)
+        return self.predict(img)
 
-# Predict
-# prediction = predict_crop(
-#     image_path="path/to/your_crop.jpg",
-#     model=model,
-#     head_path="head.pth",
-#     labels_path="label_to_idx.json"
-# )
-
-# print(f"Prediction: {prediction}")
+    def predict(self, img):
+        return predict_crop(img, self.model, self.head, self.label_to_idx)

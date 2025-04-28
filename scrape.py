@@ -8,7 +8,7 @@ from datetime import datetime
 import shutil
 
 
-cameras_path = 'data/cameras_42.json'
+cameras_path = 'data/cameras_manhattan.json'
 
 
 cameras_m104 = set([
@@ -73,7 +73,7 @@ def check_disk_space(path="/"):
 async def fetch_and_save_image(session, camera):
     camera_id = camera["id"]
     url = camera["imageUrl"]
-    folder = os.path.join("data", "camera_images", camera_id)
+    folder = os.path.join("data", "camera_images_m104", camera_id)
     os.makedirs(folder, exist_ok=True)
 
     try:
@@ -98,6 +98,7 @@ async def poll_camera(session, camera):
 
 async def main():
     cameras = load_cameras()
+    cameras = [cam for cam in cameras if cam["id"] in cameras_m104]
     print(f"Found {len(cameras)} cameras in Manhattan.")
     async with aiohttp.ClientSession() as session:
         tasks = [poll_camera(session, cam) for cam in cameras]

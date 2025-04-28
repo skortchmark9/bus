@@ -1,13 +1,14 @@
+import json
 from pathlib import Path
 from collections import defaultdict, deque
 import cv2
 from ultralytics import YOLO
 import supervision as sv
 from datetime import datetime, timedelta
-from find_buses import is_mta_blue
+from find_buses import is_mta_blue, resize
 
 
-PHOTOS_DIR = 'data/camera_images_old'
+PHOTOS_DIR = 'data/camera_images_m104'
 
 from itertools import count
 from collections import defaultdict
@@ -59,7 +60,8 @@ class BusTrack:
             self.first_seen = timestamp
         self.timestamps.append(timestamp)
         self.bboxes.append(bbox)
-        self.route_preds.append(route_pred)
+        if route_pred != 'unknown':
+            self.route_preds.append(route_pred)
         self.last_seen = timestamp
         self.frames.append(frame)
 
@@ -74,18 +76,28 @@ class BusTrack:
             return "Uncertain"
         return max(counts, key=counts.get)
     
-    def dump(self):
+    def dump(self, camera_attributes):
         # Create output directory if it doesn't exist
         output_dir = Path("output", self.bus_id)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        for timestamp, bbox, frame in zip(self.timestamps, self.bboxes, self.frames):
+        for timestamp, bbox, frame, route_pred in zip(self.timestamps, self.bboxes, self.frames, self.route_preds):
             # Add bbox to frame and write to disk
             x1, y1, x2, y2 = bbox
             timestamp_string = timestamp.strftime("%Y%m%dT%H%M%S")
+
+            label, confidence = route_pred
+            text = f'{label} {confidence:.2f}'
+
+            # Write route_pred on the frame
+            cv2.putText(frame, text, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
             cv2.imwrite(f"output/{self.bus_id}/{timestamp_string}.jpg", frame)
 
+        # save camera attributes
+        with open(f"output/{self.bus_id}/camera_info.json", "w") as f:
+            json.dump(camera_attributes, f, indent=4)
 
     def __str__(self):
         route = self.get_final_route()
@@ -96,7 +108,7 @@ class CameraSession:
 
     default_yolo_model = 'yolov8n.pt'
 
-    def __init__(self, camera_id, camera_attributes, model):
+    def __init__(self, camera_id, camera_attributes, model, route_predictor=None):
         self.camera_id = camera_id
         self.camera_attributes = camera_attributes
         self.folder = Path(PHOTOS_DIR, camera_id)
@@ -105,13 +117,32 @@ class CameraSession:
         self.tracker = TrackerManager(camera_name=self.camera_attributes["name"])
         self.using_default_model = model == self.default_yolo_model
         self.model = YOLO(model, verbose=False)
+        self.route_predictor = route_predictor
 
-
-    def get_new_frames(self):
+    def get_new_frames(self, min_timestamp=None, max_timestamp=None):
         all_frames = sorted(self.folder.glob("*.jpg"))
+        print(f"Found {len(all_frames)} total frames")
+
+        # Show last seen
+        print(f"Last seen frame: {self.last_seen}")
+
+        # Filter by last_seen
         new_frames = [f for f in all_frames if f.name > self.last_seen]
+        print(f"Frames after last_seen filter: {len(new_frames)}")
+
+        # Further filter by min_timestamp and max_timestamp
+        if min_timestamp:
+            print(f"Applying min_timestamp: {min_timestamp}")
+            new_frames = [f for f in new_frames if f.stem >= min_timestamp]
+            print(f"Frames after min_timestamp filter: {len(new_frames)}")
+        if max_timestamp:
+            print(f"Applying max_timestamp: {max_timestamp}")
+            new_frames = [f for f in new_frames if f.stem <= max_timestamp]
+            print(f"Frames after max_timestamp filter: {len(new_frames)}")
+
         if new_frames:
             self.last_seen = new_frames[-1].name
+
         return new_frames
 
     def process_frame(self, frame_path):
@@ -130,13 +161,21 @@ class CameraSession:
         for xyxy, bus_id in zip(xyxys, bus_ids):
             x1, y1, x2, y2 = map(int, xyxy)
             crop = frame[y1:y2, x1:x2]
+            crop = resize(crop)
 
             if self.using_default_model:
                 is_blue = is_mta_blue(crop)
                 if not is_blue:
                     continue
 
-            route_pred = self.recognize_sign(crop)
+            route_pred = self.route_predictor.predict(crop)
+            print(route_pred)
+
+            # debug = True
+            # if debug:
+            #     cv2.imshow("Bus Crop", crop)
+            #     cv2.waitKey(0)
+
 
             if bus_id not in self.bus_tracks:
                 self.bus_tracks[bus_id] = BusTrack(bus_id)
@@ -155,7 +194,7 @@ class CameraSession:
         # placeholder for OCR / CLIP / classifier logic
         return "Uncertain"
 
-    def step(self):
-        for frame in self.get_new_frames():
+    def step(self, min_timestamp=None, max_timestamp=None):
+        for frame in self.get_new_frames(min_timestamp, max_timestamp):
             self.process_frame(frame)
         self.flush_expired()
