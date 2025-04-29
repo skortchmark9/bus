@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Bus Camera Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    #map { height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    let map;
+    const cameraMarkers = {}; // key = camera ID, value = Leaflet marker
+
+    async function loadCameras() {
+      const response = await fetch('cameras.json');
+      const cameras = await response.json();
+
+      cameras.forEach(cam => {
+        const marker = L.marker([cam.latitude, cam.longitude]).addTo(map);
+        marker.bindPopup(`<b>${cam.id}</b><br>No buses yet`);
+        cameraMarkers[cam.id] = marker;
+      });
+    }
+
+    async function loadBuses() {
+      const response = await fetch('buses.json');
+      const busesData = await response.json();
+
+      for (const [camId, buses] of Object.entries(busesData)) {
+        const marker = cameraMarkers[camId];
+        if (marker) {
+          const busCount = buses.length;
+          const popupContent = `
+            <b>Camera ID:</b> ${camId}<br/>
+            <b>Buses:</b> ${busCount}<br/>
+            ${buses.map(bus => `Route: ${bus.route} - Arrived: ${bus.arrivalTime}`).join("<br/>")}
+          `;
+          marker.setPopupContent(popupContent);
+        }
+      }
+    }
+
+    async function loadRoutes() {
+      const response = await fetch('routes.json');
+      const routes = await response.json();
+
+      for (const [routeId, latlngs] of Object.entries(routes)) {
+        const polyline = L.polyline(latlngs, {
+          color: 'gray', // you can change this if you want
+          weight: 2,
+          opacity: 0.6
+        }).addTo(map);
+        routePolylines[routeId] = polyline;
+      }
+    }
+
+
+    async function setup() {
+      map = L.map('map').setView([40.806, -73.948], 13);
+
+      // Use a nicer basemap (CartoDB Positron)
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://carto.com/">CartoDB',
+        subdomains: 'abcd',
+        maxZoom: 19
+      }).addTo(map);
+
+      await loadCameras();
+      await loadRoutes();
+      await loadBuses(); // initial load
+
+      // Poll every 5 seconds for updated buses
+      setInterval(loadBuses, 5000);
+    }
+
+    setup();
+  </script>
+</body>
+</html>

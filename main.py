@@ -8,7 +8,7 @@ from bus_routes_at_location import (
 from test_clip_finetune import RoutePredictor
 from crop_collector import CropCollector
 from runtime import CameraSession
-from api import write_cameras
+import api
 
 # {
 #     "id": "1546f761-039c-4b5c-af5e-75c83c9f603f",
@@ -53,10 +53,12 @@ def main():
     ]
     cameras = load_cameras()
     route_shapes = load_route_shapes()
+    selected_route_shapes = { route: route_shapes[route] for route in selected_routes if route in route_shapes }
+    api.write_routes(selected_route_shapes)
     selected_cameras = []
 
     for camera in cameras:
-        routes = get_routes_for_camera(camera, route_shapes)
+        routes = get_routes_for_camera(camera, selected_route_shapes)
         if any(route in selected_routes for route in routes):
             selected_cameras.append(camera)
 
@@ -70,7 +72,7 @@ def main():
     print(f"Time taken to filter cameras: {t1 - t0:.2f} seconds")
 
     # plot_cameras_on_nyc_map(selected_cameras)
-    write_cameras(selected_cameras)
+    api.write_cameras(selected_cameras)
 
 
     # Update this if you want to use a custom model
@@ -82,6 +84,7 @@ def main():
 
     route_predictor = RoutePredictor()
     crop_collector = CropCollector(Path('data/bus_crops_labelled'))
+    crop_collector = None
 
 
     PHOTOS_DIR = 'data/camera_images'
