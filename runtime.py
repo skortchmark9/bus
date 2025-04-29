@@ -46,7 +46,7 @@ class TrackerManager:
 
 
 class BusTrack:
-    def __init__(self, bus_id):
+    def __init__(self, bus_id, output_dir):
         self.bus_id = bus_id
         self.timestamps = []
         self.bboxes = []
@@ -54,7 +54,7 @@ class BusTrack:
         self.first_seen = None
         self.last_seen = None
         self.frames = []
-        self.output_dir = Path("output", self.bus_id)
+        self.output_dir = Path(output_dir, self.bus_id)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
 
@@ -115,8 +115,9 @@ class CameraSession:
 
     default_yolo_model = 'yolov8n.pt'
 
-    def __init__(self, folder, camera_attributes, model, route_predictor=None):
-        self.folder = folder
+    def __init__(self, input_dir, output_dir, camera_attributes, model, route_predictor=None, crop_collector=None):
+        self.input_dir = input_dir
+        self.output_dir = output_dir
         self.camera_attributes = camera_attributes
         self.last_seen = ""
         self.bus_tracks = {}
@@ -124,9 +125,10 @@ class CameraSession:
         self.using_default_model = model == self.default_yolo_model
         self.model = YOLO(model, verbose=False)
         self.route_predictor = route_predictor
+        self.crop_collector = crop_collector
 
     def get_new_frames(self, min_timestamp=None, max_timestamp=None):
-        all_frames = sorted(self.folder.glob("*.jpg"))
+        all_frames = sorted(self.input_dir.glob("*.jpg"))
         # Filter by last_seen
         new_frames = [f for f in all_frames if f.name > self.last_seen]
 
@@ -160,13 +162,14 @@ class CameraSession:
         detections = sv.Detections.from_ultralytics(results[0])
         xyxys, bus_ids = self.tracker.update(detections, timestamp)
 
-        n_buses = 0
-        n_unknown = 0
-        new_buses = 0
         for xyxy, bus_id in zip(xyxys, bus_ids):
             x1, y1, x2, y2 = map(int, xyxy)
             crop = frame[y1:y2, x1:x2]
             crop = resize(crop)
+
+            if self.crop_collector:
+                self.crop_collector.save(crop)
+
 
             if self.using_default_model:
                 is_blue = is_mta_blue(crop)
@@ -174,11 +177,8 @@ class CameraSession:
                     continue
 
             route_pred = self.route_predictor.predict(crop)
-            n_buses += 1
             if route_pred[0] != 'unknown':
                 print(f"Detected {route_pred} bus at {self.camera_attributes["name"]}")
-            else:
-                n_unknown += 1
 
             # debug = True
             # if debug:
@@ -187,21 +187,20 @@ class CameraSession:
 
 
             if bus_id not in self.bus_tracks:
-                new_buses
-                self.bus_tracks[bus_id] = BusTrack(bus_id)
+                self.bus_tracks[bus_id] = BusTrack(bus_id, self.output_dir)
 
             self.bus_tracks[bus_id].update(timestamp, (x1, y1, x2, y2), route_pred, frame.copy())
 
-        return n_buses, n_unknown
+        return len(detections)
 
     def step(self, min_timestamp=None, max_timestamp=None):
         frames = self.get_new_frames(min_timestamp, max_timestamp)
-        buses_seen = 0
-
+        detections = 0
 
         for frame in frames:
-            n_buses, n_unknown = self.process_frame(frame)
+            detections += self.process_frame(frame)
 
+        print(f'{detections} detections in {len(frames)} frames')
         return frames
 
     def dump_tracks(self):
