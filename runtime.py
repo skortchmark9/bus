@@ -83,16 +83,25 @@ class BusTrack:
         timestamp = self.timestamps[best_idx]
         timestamp_string = timestamp.strftime("%Y%m%dT%H%M%S")
         return f"{self.output_dir}/{timestamp_string}.jpg"
-
-
+    
+    def get_all_frame_paths(self):
+        for timestamp in self.timestamps:
+            yield f"{self.output_dir}/{timestamp.strftime('%Y%m%dT%H%M%S')}.jpg"
 
     def get_final_route(self):
-        counts = defaultdict(int)
-        for r in self.route_preds:
-            counts[r] += 1
-        if not counts:
-            return "Uncertain"
-        return max(counts, key=counts.get)
+        best_idx = -1
+        best_conf = -1
+
+        for idx, (label, confidence) in enumerate(self.route_preds):
+            if label != "unknown" and confidence > best_conf:
+                best_conf = confidence
+                best_idx = idx
+
+        if best_idx == -1:
+            return 'unknown'
+        
+        return self.route_preds[best_idx][0]
+
     
     def write_frame(self, frame, bbox, timestamp, route_pred):
         x1, y1, x2, y2 = bbox

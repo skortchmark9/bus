@@ -31,12 +31,33 @@
       border-radius: 8px;
       box-shadow: 0 2px 6px rgba(0,0,0,0.2);
     }
+
+    .img-wrapper {
+      position: relative;
+    }
+
+    .img-wrapper button {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(255, 255, 255, 0.8);
+      border: none;
+      cursor: pointer;
+    }
+
+    .img-wrapper button.left {
+      left: 0;
+    }
+
+    .img-wrapper button.right {
+      right: 0;
+    }
   </style>
 </head>
 <body>
   <div id="controls">
     <label>Max Freshness (min): <span id="freshnessValue">5</span></label><br/>
-    <input type="range" id="freshnessSlider" min="1" max="60" value="5" style="width: 100%;"><br/>
+    <input type="range" id="freshnessSlider" min="1" max="30" value="5" style="width: 100%;"><br/>
     <label><input type="checkbox" id="hideUnknown" /> Hide "unknown" routes</label>
   </div>
   <div id="map"></div>
@@ -117,6 +138,18 @@
       return rgbToHex(color);
     }
 
+    function flipBusImage(button, delta) {
+      const img = button.parentElement.querySelector('img');
+      const images = img.getAttribute('data-images').split(',');
+      let index = parseInt(img.getAttribute('data-index'), 10);
+
+      index = (index + delta + images.length) % images.length; // wrap around
+      img.setAttribute('data-index', index);
+      img.src = images[index];
+    }
+
+
+
 
     async function loadBuses() {
       const response = await fetch('buses.json');
@@ -129,6 +162,8 @@
         let popupContent = `<b>Camera ID:</b> ${camId}<br/>`;
         let visibleBuses = [];
         let latestDeparture = null;
+        let hasM104 = false;
+
 
         const busSlice = buses.slice(-5); // Get the last 5 buses for this camera
         busSlice.reverse();
@@ -137,6 +172,11 @@
           if (!latestDeparture || depTime > latestDeparture) {
             latestDeparture = depTime;
           }
+
+          if (bus.route === "m104") {
+            hasM104 = true;
+          }
+
 
           if (hideUnknownRoutes && bus.route.toLowerCase() === 'unknown') {
             return; // Skip adding to visible buses
@@ -154,8 +194,18 @@
               <b>Route:</b> ${bus.route}<br/>
               <b>Arrived:</b> ${new Date(bus.arrived).toLocaleString()}<br/>
               <b>Departed:</b> ${new Date(bus.departed).toLocaleString()}<br/>
-              <img class="bus-thumb" src="${bus.image}" width="150" style="margin-top:5px;"><br/>
-            `;
+              <div class="img-wrapper" style="text-align: center; margin-top: 5px;">
+                <button class="left" onclick="flipBusImage(this, -1)">⬅️</button>
+                <img 
+                  class="bus-thumb" 
+                  src="${bus.best_image}" 
+                  width="150" 
+                  data-images="${bus.images.join(',')}" 
+                  data-index="0"
+                  style="display:inline-block; vertical-align:middle;">
+                <button class="right" onclick="flipBusImage(this, 1)">➡️</button>
+              </div>
+              `;
           });
         } else {
           popupContent += `<i>No visible buses</i>`;
@@ -166,7 +216,8 @@
         // -- Now the color is based ONLY on freshness --
         if (latestDeparture) {
           const minutesAgo = (Date.now() - latestDeparture.getTime()) / 60000;
-          const color = getHeatmapColor(minutesAgo, maxFreshnessMinutes); // color uses the slider
+          const baseColor = hasM104 ? [0, 100, 255] : [0, 255, 0]; // blueish or greenish
+          const color = getHeatmapColor(minutesAgo, maxFreshnessMinutes, baseColor);
           marker.setIcon(createGlowIcon(color, 0.9));
         } else {
           // If no known buses ever, use very faint color

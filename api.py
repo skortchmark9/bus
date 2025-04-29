@@ -42,13 +42,16 @@ def write_buses(sessions, filename="buses.json"):
             arrival = track.first_seen
             departure = track.last_seen
             image_path = track.best_frame_path().replace('site/', '')
+            images = [image.replace('site/', '') for image in track.get_all_frame_paths()]
+
 
             bus_info = {
                 "bus_id": bus_id,
-                "route": track.get_final_route()[0],
+                "route": track.get_final_route(),
                 "arrived": arrival.isoformat() + 'Z',
                 "departed": departure.isoformat() + 'Z',
-                "image": image_path
+                "best_image": image_path,
+                "images": images,
             }
 
             if camera_id not in output:
