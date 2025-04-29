@@ -1,4 +1,5 @@
 import time
+import shutil
 from pathlib import Path
 from bus_routes_at_location import (
     get_routes_for_camera,
@@ -88,13 +89,16 @@ def main():
 
 
     PHOTOS_DIR = 'data/camera_images'
-    output_dir = Path('output_50')
+    output_dir = Path('site/output_50')
+    shutil.rmtree(output_dir, ignore_errors=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
     specific_camera_id = '45cb119b-0e4a-442e-9410-b810ab8c255d'
     specific_camera_id = None
     min_timestamp = None
     max_timestamp = None
-    # min_timestamp = '20250427T131710'
-    # max_timestamp = '20250427T131900'
+    min_timestamp = '20250428T234214'
+    max_timestamp = '20250428T234312'
+    
 
 
     for camera in selected_cameras:
@@ -118,9 +122,13 @@ def main():
         print(f"Iteration {i}")
         for session in sessions:
             session.step(min_timestamp, max_timestamp)
+
+        api.write_buses(sessions)
+
+        for session in sessions:
             session.dump_tracks()
 
-            time.sleep(2)
+        time.sleep(2)
         
     t2 = time.time()
     print(f"Time taken to process data: {t2 - t1:.2f} seconds")

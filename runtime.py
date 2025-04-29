@@ -36,7 +36,7 @@ class TrackerManager:
 
         for i, tracker_id in enumerate(updated_dets.tracker_id):
             if tracker_id not in self.active_ids[self.generation]:
-                bus_id = f"{self.camera_name}#{next(self.id_counter)}"
+                bus_id = f"{self.camera_name}___{next(self.id_counter)}"
                 self.active_ids[self.generation][tracker_id] = bus_id
             else:
                 bus_id = self.active_ids[self.generation][tracker_id]
@@ -70,6 +70,21 @@ class BusTrack:
 
     def is_expired(self, current_time, timeout=timedelta(seconds=10)):
         return self.last_seen and (current_time - self.last_seen) > timeout
+    
+    def best_frame_path(self):
+        best_idx = 0
+        best_conf = -1
+
+        for idx, (label, confidence) in enumerate(self.route_preds):
+            if label != "unknown" and confidence > best_conf:
+                best_conf = confidence
+                best_idx = idx
+
+        timestamp = self.timestamps[best_idx]
+        timestamp_string = timestamp.strftime("%Y%m%dT%H%M%S")
+        return f"{self.output_dir}/{timestamp_string}.jpg"
+
+
 
     def get_final_route(self):
         counts = defaultdict(int)
@@ -134,13 +149,9 @@ class CameraSession:
 
         # Further filter by min_timestamp and max_timestamp
         if min_timestamp:
-            print(f"Applying min_timestamp: {min_timestamp}")
             new_frames = [f for f in new_frames if f.stem >= min_timestamp]
-            print(f"Frames after min_timestamp filter: {len(new_frames)}")
         if max_timestamp:
-            print(f"Applying max_timestamp: {max_timestamp}")
             new_frames = [f for f in new_frames if f.stem <= max_timestamp]
-            print(f"Frames after max_timestamp filter: {len(new_frames)}")
 
         print(f"New frames: {len(new_frames)}")
         if new_frames:
@@ -161,6 +172,7 @@ class CameraSession:
 
         detections = sv.Detections.from_ultralytics(results[0])
         xyxys, bus_ids = self.tracker.update(detections, timestamp)
+        multiple_vehicles = len(xyxys) > 1
 
         for xyxy, bus_id in zip(xyxys, bus_ids):
             x1, y1, x2, y2 = map(int, xyxy)
@@ -189,7 +201,10 @@ class CameraSession:
             if bus_id not in self.bus_tracks:
                 self.bus_tracks[bus_id] = BusTrack(bus_id, self.output_dir)
 
-            self.bus_tracks[bus_id].update(timestamp, (x1, y1, x2, y2), route_pred, frame.copy())
+            img = frame
+            if multiple_vehicles:
+                img = frame.copy()
+            self.bus_tracks[bus_id].update(timestamp, (x1, y1, x2, y2), route_pred, img)
 
         return len(detections)
 

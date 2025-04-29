@@ -6,6 +6,11 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <style>
     #map { height: 100vh; }
+
+    .custom-glow-icon {
+      background: none;
+      border: none;
+    }
   </style>
 </head>
 <body>
@@ -16,15 +21,54 @@
     let map;
     const cameraMarkers = {}; // key = camera ID, value = Leaflet marker
 
+    function createGlowIcon(color = '#ccc', opacity = 0.5) {
+      return L.divIcon({
+        className: "custom-glow-icon",
+        html: `<div style="
+          width: 24px;
+          height: 24px;
+          background: ${color};
+          border-radius: 50%;
+          border: 2px solid #333;
+          box-shadow: 0 0 10px 5px ${color};
+          opacity: ${opacity};
+        "></div>`
+      });
+    }
+
     async function loadCameras() {
       const response = await fetch('cameras.json');
       const cameras = await response.json();
 
       cameras.forEach(cam => {
-        const marker = L.marker([cam.latitude, cam.longitude]).addTo(map);
-        marker.bindPopup(`<b>${cam.id}</b><br>No buses yet`);
+        const marker = L.marker([cam.latitude, cam.longitude], {
+          icon: createGlowIcon() // <-- default faint circle
+        }).addTo(map);
+
+        marker.bindPopup(`<b>${cam.name}</b><br>No buses yet`);
         cameraMarkers[cam.id] = marker;
       });
+    }
+
+    function interpolateColor(color1, color2, factor) {
+      const result = color1.slice();
+      for (let i = 0; i < 3; i++) {
+        result[i] = Math.round(color1[i] + factor * (color2[i] - color1[i]));
+      }
+      return result;
+    }
+
+    function rgbToHex(rgb) {
+      return '#' + rgb.map(x => {
+        const hex = x.toString(16);
+        return hex.length === 1 ? '0' + hex : hex;
+      }).join('');
+    }
+
+    function getHeatmapColor(minutesAgo, maxMinutes=300) {
+      const factor = Math.min(minutesAgo / maxMinutes, 1.0);
+      const color = interpolateColor([0, 255, 0], [200, 200, 200], factor); // green to gray
+      return rgbToHex(color);
     }
 
     async function loadBuses() {
@@ -35,12 +79,34 @@
         const marker = cameraMarkers[camId];
         if (marker) {
           const busCount = buses.length;
-          const popupContent = `
+          let popupContent = `
             <b>Camera ID:</b> ${camId}<br/>
-            <b>Buses:</b> ${busCount}<br/>
-            ${buses.map(bus => `Route: ${bus.route} - Arrived: ${bus.arrivalTime}`).join("<br/>")}
+            <b>Buses detected:</b> ${busCount}<br/>
           `;
+
+          let latestDeparture = null;
+          buses.forEach(bus => {
+            popupContent += `
+              <hr/>
+              <b>Route:</b> ${bus.route}<br/>
+              <b>Arrived:</b> ${new Date(bus.arrived).toLocaleString()}<br/>
+              <b>Departed:</b> ${new Date(bus.departed).toLocaleString()}<br/>
+              <img src="${bus.image}" width="150" style="margin-top:5px;"><br/>
+            `;
+
+            const depTime = new Date(bus.departed);
+            if (!latestDeparture || depTime > latestDeparture) {
+              latestDeparture = depTime;
+            }
+          });
+
           marker.setPopupContent(popupContent);
+
+          if (latestDeparture) {
+            const minutesAgo = (Date.now() - latestDeparture.getTime()) / 60000;
+            const color = getHeatmapColor(minutesAgo);
+            marker.setIcon(createGlowIcon(color, 0.9)); // higher opacity when active
+          }
         }
       }
     }
@@ -55,7 +121,7 @@
           weight: 2,
           opacity: 0.6
         }).addTo(map);
-        routePolylines[routeId] = polyline;
+        // routePolylines[routeId] = polyline;
       }
     }
 
