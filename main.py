@@ -1,4 +1,5 @@
 import time
+from collections import defaultdict
 import shutil
 from pathlib import Path
 from bus_routes_at_location import (
@@ -49,7 +50,6 @@ def plot_cameras_on_nyc_map(camera_list):
 def main():
     t0 = time.time()
     selected_routes = [
-        # 'M101',
         'M104',
     ]
     cameras = load_cameras()
@@ -64,13 +64,22 @@ def main():
             selected_cameras.append(camera)
 
     sessions = []
-    print('\n'.join([camera["name"] for camera in selected_cameras]))
+
     # Make the cameras unique by id
     selected_cameras = {camera["id"]: camera for camera in selected_cameras}
     selected_cameras = list(selected_cameras.values())
 
+    cameras_by_ave = defaultdict(list)
+    for camera in selected_cameras:
+        ave, st = camera['name'].split('@')
+        cameras_by_ave[ave].append(st.strip())
+
+    print("Cameras:")
+    for ave, streets in cameras_by_ave.items():
+        print(f"\t{ave} @ {', '.join(streets)}")
+
+
     t1 = time.time()
-    print(f"Time taken to filter cameras: {t1 - t0:.2f} seconds")
 
     # plot_cameras_on_nyc_map(selected_cameras)
     api.write_cameras(selected_cameras)

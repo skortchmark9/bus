@@ -1,3 +1,4 @@
+import time
 import json
 from pathlib import Path
 from collections import defaultdict, deque
@@ -201,11 +202,6 @@ class CameraSession:
             if route_pred[0] != 'unknown':
                 print(f"Detected {route_pred} bus at {self.camera_attributes["name"]}")
 
-            # debug = True
-            # if debug:
-            #     cv2.imshow("Bus Crop", crop)
-            #     cv2.waitKey(0)
-
 
             if bus_id not in self.bus_tracks:
                 self.bus_tracks[bus_id] = BusTrack(bus_id, self.output_dir)
@@ -221,10 +217,13 @@ class CameraSession:
         frames = self.get_new_frames(min_timestamp, max_timestamp)
         detections = 0
 
+        t0 = time.time()
+
         for frame in frames:
             detections += self.process_frame(frame)
 
-        print(f'{detections} detections in {len(frames)} frames')
+        t1 = time.time()
+        print(f'{detections} detections in {len(frames)} frames in {t1 - t0:.2f}s')
         return frames
 
     def dump_tracks(self):

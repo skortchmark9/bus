@@ -37,10 +37,10 @@
     }
 
     .img-wrapper button {
+      background: none;
       position: absolute;
       top: 50%;
       transform: translateY(-50%);
-      background: rgba(255, 255, 255, 0.8);
       border: none;
       cursor: pointer;
     }
@@ -159,7 +159,10 @@
         const marker = cameraMarkers[camId];
         if (!marker) continue;
 
-        let popupContent = `<b>Camera ID:</b> ${camId}<br/>`;
+        let popupContent = `
+        <b>${cameraData[camId].name}</b><br/>
+        <b>Camera ID:</b> ${camId}<br/>
+        `;
         let visibleBuses = [];
         let latestDeparture = null;
         let hasM104 = false;
