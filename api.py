@@ -45,7 +45,7 @@ def write_buses(sessions, filename="buses.json"):
 
             bus_info = {
                 "bus_id": bus_id,
-                "route": track.get_final_route(),
+                "route": track.get_final_route()[0],
                 "arrived": arrival.isoformat() + 'Z',
                 "departed": departure.isoformat() + 'Z',
                 "image": image_path

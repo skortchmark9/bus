@@ -40,6 +40,8 @@ def load_route_shapes():
 def load_cameras():
     with open('./data/cameras_manhattan.json', 'r') as file:
         cameras = json.load(file)
+
+    cameras = [cam for cam in cameras if cam['isOnline'] and cam['isOnline'] != 'false']
     return cameras
 
 def get_routes_passing_through(lat, lon, route_shapes, radius_m=50):

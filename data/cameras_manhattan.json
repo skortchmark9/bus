@@ -1463,7 +1463,7 @@
         "latitude": 40.766969,
         "longitude": -73.982265,
         "area": "Manhattan",
-        "isOnline": "true",
+        "isOnline": false,
         "imageUrl": "https://webcams.nyctmc.org/api/cameras/78a5c61d-9dce-4b52-b0da-bf7d22c1f501/image"
     },
     {

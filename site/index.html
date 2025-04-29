@@ -11,15 +11,56 @@
       background: none;
       border: none;
     }
+
+    .leaflet-popup-content-wrapper {
+      max-height: 300px;
+      overflow: scroll;
+    }
+
+    .bus-thumb {
+      width: 100%;
+    }
+
+    #controls {
+      padding: 10px;
+      background: white;
+      z-index: 1000;
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
   </style>
 </head>
 <body>
+  <div id="controls">
+    <label>Max Freshness (min): <span id="freshnessValue">5</span></label><br/>
+    <input type="range" id="freshnessSlider" min="1" max="60" value="5" style="width: 100%;"><br/>
+    <label><input type="checkbox" id="hideUnknown" /> Hide "unknown" routes</label>
+  </div>
   <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
     let map;
     const cameraMarkers = {}; // key = camera ID, value = Leaflet marker
+    const cameraData = {}
+    let maxFreshnessMinutes = 5;
+    let hideUnknownRoutes = false;
+
+    document.getElementById('freshnessSlider').addEventListener('input', (e) => {
+      maxFreshnessMinutes = parseInt(e.target.value);
+      document.getElementById('freshnessValue').innerText = maxFreshnessMinutes;
+      loadBuses();
+    });
+
+    document.getElementById('hideUnknown').addEventListener('change', (e) => {
+      hideUnknownRoutes = e.target.checked;
+      loadBuses();
+    });
+
+
 
     function createGlowIcon(color = '#ccc', opacity = 0.5) {
       return L.divIcon({
@@ -41,6 +82,7 @@
       const cameras = await response.json();
 
       cameras.forEach(cam => {
+        cameraData[cam.id] = cam; // Store camera data for later use
         const marker = L.marker([cam.latitude, cam.longitude], {
           icon: createGlowIcon() // <-- default faint circle
         }).addTo(map);
@@ -65,11 +107,16 @@
       }).join('');
     }
 
-    function getHeatmapColor(minutesAgo, maxMinutes=300) {
-      const factor = Math.min(minutesAgo / maxMinutes, 1.0);
-      const color = interpolateColor([0, 255, 0], [200, 200, 200], factor); // green to gray
+    // now accepts a "startColor" parameter!
+    function getHeatmapColor(minutesAgo, maxMinutes=30, startColor=[0, 255, 0]) {
+      if (minutesAgo < 0) minutesAgo = 0;
+      if (minutesAgo > maxMinutes) minutesAgo = maxMinutes;
+
+      const factor = minutesAgo / maxMinutes;
+      const color = interpolateColor(startColor, [200, 200, 200], factor); // fade to gray
       return rgbToHex(color);
     }
+
 
     async function loadBuses() {
       const response = await fetch('buses.json');
@@ -77,36 +124,53 @@
 
       for (const [camId, buses] of Object.entries(busesData)) {
         const marker = cameraMarkers[camId];
-        if (marker) {
-          const busCount = buses.length;
-          let popupContent = `
-            <b>Camera ID:</b> ${camId}<br/>
-            <b>Buses detected:</b> ${busCount}<br/>
-          `;
+        if (!marker) continue;
 
-          let latestDeparture = null;
-          buses.forEach(bus => {
+        let popupContent = `<b>Camera ID:</b> ${camId}<br/>`;
+        let visibleBuses = [];
+        let latestDeparture = null;
+
+        const busSlice = buses.slice(-5); // Get the last 5 buses for this camera
+        busSlice.reverse();
+        busSlice.forEach(bus => {
+          const depTime = new Date(bus.departed);
+          if (!latestDeparture || depTime > latestDeparture) {
+            latestDeparture = depTime;
+          }
+
+          if (hideUnknownRoutes && bus.route.toLowerCase() === 'unknown') {
+            return; // Skip adding to visible buses
+          }
+
+          visibleBuses.push(bus);
+        });
+
+        popupContent += `<b>Buses detected:</b> ${visibleBuses.length}<br/>`;
+
+        if (visibleBuses.length > 0) {
+          visibleBuses.forEach(bus => {
             popupContent += `
               <hr/>
               <b>Route:</b> ${bus.route}<br/>
               <b>Arrived:</b> ${new Date(bus.arrived).toLocaleString()}<br/>
               <b>Departed:</b> ${new Date(bus.departed).toLocaleString()}<br/>
-              <img src="${bus.image}" width="150" style="margin-top:5px;"><br/>
+              <img class="bus-thumb" src="${bus.image}" width="150" style="margin-top:5px;"><br/>
             `;
-
-            const depTime = new Date(bus.departed);
-            if (!latestDeparture || depTime > latestDeparture) {
-              latestDeparture = depTime;
-            }
           });
+        } else {
+          popupContent += `<i>No visible buses</i>`;
+        }
 
-          marker.setPopupContent(popupContent);
+        marker.setPopupContent(popupContent);
 
-          if (latestDeparture) {
-            const minutesAgo = (Date.now() - latestDeparture.getTime()) / 60000;
-            const color = getHeatmapColor(minutesAgo);
-            marker.setIcon(createGlowIcon(color, 0.9)); // higher opacity when active
-          }
+        // -- Now the color is based ONLY on freshness --
+        if (latestDeparture) {
+          const minutesAgo = (Date.now() - latestDeparture.getTime()) / 60000;
+          const color = getHeatmapColor(minutesAgo, maxFreshnessMinutes); // color uses the slider
+          marker.setIcon(createGlowIcon(color, 0.9));
+        } else {
+          // If no known buses ever, use very faint color
+          marker.setIcon(createGlowIcon('#ccc', 0.3));
         }
       }
     }
