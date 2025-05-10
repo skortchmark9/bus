@@ -8,6 +8,7 @@ from bus_routes_at_location import (
     load_cameras,
 )
 from test_clip_finetune import RoutePredictor
+# from resnet import RoutePredictor
 from crop_collector import CropCollector
 from runtime import CameraSession
 import api
@@ -101,7 +102,7 @@ def main():
     output_dir = Path('site/output_50')
     shutil.rmtree(output_dir, ignore_errors=True)
     output_dir.mkdir(parents=True, exist_ok=True)
-    # specific_camera_id = '45cb119b-0e4a-442e-9410-b810ab8c255d'
+    specific_camera_id = '45cb119b-0e4a-442e-9410-b810ab8c255d'
     specific_camera_id = None
     min_timestamp = None
     max_timestamp = None

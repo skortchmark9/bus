@@ -6,22 +6,42 @@ import torch.nn as nn
 import torch.optim as optim
 import pandas as pd
 import clip
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 from PIL import Image
 from collections import defaultdict
+import numpy as np
+import torchvision.transforms as T
 
 device = "mps" if torch.backends.mps.is_available() else "cpu"
 
 # Load CLIP model
-model, preprocess = clip.load("ViT-B/32", device=device)
+model, _ = clip.load("ViT-B/32", device=device)
 model.eval()
+
+# ---- AUGMENTATION ----
+def get_augmentation_pipeline():
+    return T.Compose([
+        T.Resize((224, 224)),  # CLIP input size
+        T.RandomApply([
+            T.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)
+        ], p=0.8),
+        T.RandomApply([
+            T.GaussianBlur(kernel_size=(5, 9), sigma=(0.1, 2.0))
+        ], p=0.3),
+        T.RandomAffine(degrees=10, translate=(0.1, 0.1), scale=(0.9, 1.1)),
+        T.RandomHorizontalFlip(p=0.5),
+        T.ToTensor(),
+        T.Normalize(mean=(0.48145466, 0.4578275, 0.40821073),
+                    std=(0.26862954, 0.26130258, 0.27577711))  # CLIP mean/std
+    ])
 
 # ---- DATASET ----
 class BusCropDataset(Dataset):
-    def __init__(self, image_folder, label_csv, label_to_idx, add_unknown=True):
+    def __init__(self, image_folder, label_csv, label_to_idx, transform=None, add_unknown=True):
         self.image_folder = image_folder
         self.df = pd.read_csv(label_csv, header=None, names=["filename", "label"])
         self.label_to_idx = label_to_idx
+        self.transform = transform
 
         if add_unknown:
             all_images = [f for f in os.listdir(image_folder) if f.endswith(".jpg")]
@@ -51,7 +71,9 @@ class BusCropDataset(Dataset):
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
         img_path = os.path.join(self.image_folder, row["filename"])
-        img = preprocess(Image.open(img_path))
+        img = Image.open(img_path).convert('RGB')
+        if self.transform:
+            img = self.transform(img)
         label_idx = self.label_to_idx[row["label"]]
         return img, label_idx
 
@@ -68,9 +90,15 @@ class ClassifierHead(nn.Module):
     def forward(self, x):
         return self.fc(x)
 
+def create_balanced_sampler(dataset):
+    label_counts = dataset.df["label"].value_counts().to_dict()
+    weights = [1.0 / label_counts[row["label"]] for _, row in dataset.df.iterrows()]
+    return WeightedRandomSampler(torch.DoubleTensor(weights), len(weights), replacement=True)
+
 # ---- TRAINING ----
 def train_head(dataset, num_classes, epochs=30):
-    loader = DataLoader(dataset, batch_size=32, shuffle=True)
+    sampler = create_balanced_sampler(dataset)
+    loader = DataLoader(dataset, batch_size=32, sampler=sampler)
     head = ClassifierHead(512, num_classes).to(device)
     optimizer = optim.AdamW(head.parameters(), lr=1e-3)
     loss_fn = nn.CrossEntropyLoss()
@@ -95,7 +123,8 @@ def train_head(dataset, num_classes, epochs=30):
 
 # ---- EVALUATION ----
 def evaluate_head(model, head, dataset, label_to_idx):
-    loader = DataLoader(dataset, batch_size=32, shuffle=False)
+    sampler = create_balanced_sampler(dataset)
+    loader = DataLoader(dataset, batch_size=32, sampler=sampler)
     idx_to_label = {v: k for k, v in label_to_idx.items()}
     correct = defaultdict(int)
     total = defaultdict(int)
@@ -135,7 +164,7 @@ def load_head_and_labels(head_path="head.pth", labels_path="label_to_idx.json"):
     head.eval()
     return head, label_to_idx
 
-# ---- MAIN (optional) ----
+# ---- MAIN ----
 def main():
     label_csv = "data/crop_labels.csv"
     crop_folder = "data/bus_crops_labelled"
@@ -143,7 +172,9 @@ def main():
     df = pd.read_csv(label_csv, header=None, names=["filename", "label"])
     classes = sorted(df["label"].unique()) + ["unknown"]
     label_to_idx = {label: i for i, label in enumerate(classes)}
-    dataset = BusCropDataset(crop_folder, label_csv, label_to_idx)
+
+    transform = get_augmentation_pipeline()
+    dataset = BusCropDataset(crop_folder, label_csv, label_to_idx, transform=transform)
 
     head = train_head(dataset, num_classes=len(label_to_idx))
     evaluate_head(model, head, dataset, label_to_idx)

@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import clip
 
-from clip_finetune import BusCropDataset, train_head, evaluate_head, save_head_and_labels, load_head_and_labels, ClassifierHead
+from clip_finetune import load_head_and_labels
 
 device = "mps" if torch.backends.mps.is_available() else "cpu"
 model, preprocess = clip.load("ViT-B/32", device=device)

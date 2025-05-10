@@ -4,3 +4,4 @@ aiofiles
 contextly
 openai-clip
 geopandas
+openpyxl

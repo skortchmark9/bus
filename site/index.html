@@ -152,7 +152,7 @@
 
 
     async function loadBuses() {
-      const response = await fetch('buses.json');
+      const response = await fetch('buses.json',  {cache: "no-store"});
       const busesData = await response.json();
 
       for (const [camId, buses] of Object.entries(busesData)) {

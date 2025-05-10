@@ -125,6 +125,7 @@ class BusTrack:
             'camera': camera_attributes,
             'bus_id': self.bus_id,
             'route': self.get_final_route(),
+            'bboxes': self.bboxes,
             'route_preds': self.route_preds,
         }
         # save camera attributes
