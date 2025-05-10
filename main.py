@@ -7,8 +7,8 @@ from bus_routes_at_location import (
     load_route_shapes,
     load_cameras,
 )
-from test_clip_finetune import RoutePredictor
-# from resnet import RoutePredictor
+from test_clip_finetune import RoutePredictor as ClipRoutePredictor
+from resnet import RoutePredictor as ResnetRoutePredictor
 from crop_collector import CropCollector
 from runtime import CameraSession
 import api
@@ -93,12 +93,12 @@ def main():
     model = 'models/fine-tuned-50-epochs.pt'
     print("Using model:", model)
 
-    route_predictor = RoutePredictor()
-    crop_collector = CropCollector(Path('data/bus_crops_labelled'))
+    route_predictor = ResnetRoutePredictor()
+    # crop_collector = CropCollector(Path('data/examples/4_27_1500/crops_labelled'))
     crop_collector = None
 
 
-    PHOTOS_DIR = 'data/camera_images'
+    PHOTOS_DIR = 'data/examples/4_27_1500/camera_images_m104'
     output_dir = Path('site/output_50')
     shutil.rmtree(output_dir, ignore_errors=True)
     output_dir.mkdir(parents=True, exist_ok=True)

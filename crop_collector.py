@@ -9,7 +9,7 @@ class CropCollector:
         self.counter = len(sorted(folder.rglob("*.jpg")))
         print(f"Found {self.counter} existing crops in {folder}")
 
-    def save(self, crop):
+    def save(self, crop, prediction=None):
         # Save the crop to the folder with a unique name
         filename = f"{self.counter:06d}.jpg"
         filepath = self.folder / filename

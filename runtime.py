@@ -190,9 +190,6 @@ class CameraSession:
             crop = frame[y1:y2, x1:x2]
             crop = resize(crop)
 
-            if self.crop_collector:
-                self.crop_collector.save(crop)
-
 
             if self.using_default_model:
                 is_blue = is_mta_blue(crop)
@@ -200,6 +197,10 @@ class CameraSession:
                     continue
 
             route_pred = self.route_predictor.predict(crop)
+
+            if self.crop_collector:
+                self.crop_collector.save(crop, route_pred)
+
             if route_pred[0] != 'unknown':
                 print(f"Detected {route_pred} bus at {self.camera_attributes["name"]}")
 
