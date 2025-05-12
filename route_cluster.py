@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import pandas as pd
 import numpy as np
 from sklearn.cluster import KMeans
 from datetime import datetime
@@ -19,6 +20,7 @@ def load_data():
     # **2. Gather feature vectors**
     features = []
     bus_ids  = []
+
     for track_dir in CAM_FOLDER.iterdir():
         info_path = track_dir / "info.json"
         if not info_path.exists():
@@ -33,7 +35,8 @@ def load_data():
 
         # Normalize coords to [0,1] by image size if you know it; 
         # here we assume a fixed size (e.g. 1920×1080), or skip norm for raw pixels:
-        W, H = 352, 240
+        frame_size = (352, 240)
+        W, H = frame_size
 
         # Entry & exit centroids
         def centroid(bb):
@@ -45,42 +48,80 @@ def load_data():
 
         # Dwell time (in frames; you could convert to seconds if you know fps)
         timestamps = [datetime.strptime(ts, "%Y%m%dT%H%M%S") for ts in timestamps]
-        t_dwell = (timestamps[-1] - timestamps[0]).total_seconds()
 
-        features.append([x_in, y_in, x_out, y_out, t_dwell])
+        grid_feats = grid_frame_counts(bboxes, frame_size, grid_size=4)
+        features.append([x_in, y_in, x_out, y_out] + list(grid_feats))
         bus_ids.append(track_dir.name)
 
     features = np.array(features)
     return features, bus_ids
 
-def kmeans(features, bus_ids, K=5):
+def grid_frame_counts(
+    bboxes: list[list[float]],
+    frame_size: tuple[int,int],
+    grid_size: int
+) -> np.ndarray:
+    """
+    Build a grid histogram of where the bus appeared in each frame.
+    
+    Args:
+      bboxes: list of [x1, y1, x2, y2] for each frame
+      frame_size: (W, H) in pixels
+      grid_size: number of cells per row/col (G)
+    
+    Returns:
+      1D np.array of length G*G, counts per cell (row-major).
+    """
+    W, H = frame_size
+    G = grid_size
+    counts = np.zeros((G, G), dtype=int)
+    
+    for x1, y1, x2, y2 in bboxes:
+        cx = (x1 + x2) / 2 / W
+        cy = (y1 + y2) / 2 / H
+        # map [0,1] to cell idx [0..G-1]
+        j = min(int(cx * G), G - 1)
+        i = min(int(cy * G), G - 1)
+        counts[i, j] += 1
+    
+    return counts.ravel()
+
+def mark_outliers(
+    clusters: pd.Series,
+    min_size: int = 2,
+    outlier_label: int = -1
+) -> pd.Series:
+    """
+    Keep clusters of size >= min_size, but reassign any cluster
+    smaller than that to `outlier_label`.
+    """
+    counts = clusters.value_counts()
+    small = counts[counts < min_size].index
+    cleaned = clusters.copy()
+    cleaned[cleaned.isin(small)] = outlier_label
+    return cleaned
+
+def kmeans(features, bus_ids, K=10):
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(features)
-    km = KMeans(n_clusters=k, random_state=42).fit(X_scaled)
+    km = KMeans(n_clusters=K, random_state=42).fit(X_scaled)
 
     labels = km.labels_
 
     # 1. Zip them together
-    results = list(zip(bus_ids, labels))
+    clusters = pd.Series(labels, index=bus_ids, name='cluster')
+    clusters = clusters.sort_index(key=lambda idx: idx.map(lambda s: int(s.split('___')[-1])))
 
-    # 2. Sort by the integer after the '___'
-    def sort_key(pair):
-        bus_id, _ = pair
-        # assumes bus_id looks like "…___<number>"
-        suffix = bus_id.split("___")[-1]
-        return int(suffix)
+    clusters_clean = mark_outliers(clusters, min_size=2, outlier_label=-1)
 
-    results.sort(key=sort_key)
-
-    # **4. Print results**
-    for bus_id, lbl in results:
+    for bus_id, lbl in clusters_clean.items():
         print(f"Bus {bus_id} → cluster {lbl}")
 
-    return results
+    return clusters_clean
 
 
 def copy(results):
-    for bus_id, label in results:
+    for bus_id, label in results.items():
         src = CAM_FOLDER / bus_id
         if not src.exists():
             print(f"Skipping missing folder: {bus_id}")
